@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>エゴグラム診断 | 精度調整版</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --primary:#1e293b; --accent:#3b82f6; --bg:#f1f5f9; --white:#ffffff; }
+        body { font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:#334155;margin:0;line-height:1.8;}
+        .wrapper { max-width:850px;margin:0 auto;background:var(--white);box-shadow:0 10px 25px rgba(0,0,0,0.05);}
+        .hero-img { width:100%; border-bottom:4px solid var(--accent); display: block; background: #2563eb; color: #fff; text-align: center; padding: 30px 0; font-weight: bold; font-size: 1.5rem;}
+        .main-content { padding:40px;}
+        header { text-align:center;margin-bottom:40px;}
+        h1 { font-size:1.8rem;color:var(--primary); margin-bottom: 10px;}
+        .q-card { background:#fff;padding:25px;border-radius:16px;margin-bottom:20px;border:1px solid #e2e8f0; transition: 0.3s;}
+        .q-card.answered { border-left:8px solid var(--accent); background: #f8fafc;}
+        .q-text { font-size:1.1rem;font-weight:700;margin-bottom:20px;display:block;}
+        .options { display:flex;gap:12px;}
+        .opt-btn { flex:1;padding:12px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;cursor:pointer;font-weight:bold; transition: 0.2s; text-align: center;}
+        .opt-btn.active { background:var(--accent);color:white;border-color:var(--accent);}
+        #diagnose-trigger { display:none;text-align:center;padding:50px 0;}
+        .btn-submit { padding:20px 80px;font-size:1.3rem;font-weight:bold;border-radius:50px;border:none;background:linear-gradient(135deg,#3b82f6,#2563eb);color:white;cursor:pointer;}
+        #result-section { display:none;padding:50px 40px;border-top:4px solid var(--accent); background: #fff;}
+        .res-type { font-size:1.8rem;color:var(--accent);font-weight:900; text-align:center; margin: 20px 0;}
+        .chart-box { height:400px; margin-bottom:30px; background: #fff9e6; padding: 20px; border-radius: 10px; border: 1px solid #fed7aa;}
+        .advice-box { background:#f8fafc;padding:35px;border-radius:20px;border:1px solid #e2e8f0;white-space:pre-wrap;}
+        .advice-title { font-weight:800;font-size:1.3rem;margin-bottom:15px;color:var(--primary); border-bottom: 2px solid var(--accent); display: inline-block;}
+        .remaining { position: sticky; top: 0; background: rgba(241,245,249,0.95); padding: 15px; z-index: 100; text-align:center;font-weight:bold;color:var(--accent); border-bottom: 1px solid #ddd;}
+    </style>
+</head>
+<body>
+
+<div class="wrapper">
+    <div class="hero-img">精密エゴグラム診断</div>
+    <div class="main-content">
+        <header>
+            <h1>エゴグラム・プロファイリング</h1>
+            <p>あなたの心のエネルギー配分を可視化します</p>
+        </header>
+        <div class="remaining" id="remaining-count">残り50問です</div>
+        <div id="questions-container"></div>
+        <div id="diagnose-trigger">
+            <button class="btn-submit" id="calc-btn">診断結果を解析する</button>
+        </div>
+        <div id="result-section">
+            <div id="res-type-name" class="res-type"></div>
+            <div class="chart-box"><canvas id="egogramChart"></canvas></div>
+            <div class="advice-box">
+                <div class="advice-title">分析結果とアドバイス</div>
+                <div id="res-description"></div>
+            </div>
+            <div style="text-align:center;margin-top:30px;">
+                <button class="opt-btn" onclick="location.reload()" style="max-width:300px; padding: 15px 40px;">もう一度診断する</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 質問・データは前回同様（省略せず内部に保持）
+const questions = [
+    { id:1,text:"してみたいことがたくさんある",cat:"FC"}, { id:2,text:"無駄遣いはしない",cat:"CP"}, { id:3,text:"差し入れや贈り物をするのが好き",cat:"NP"}, { id:4,text:"好奇心が旺盛なほうだ",cat:"FC"}, { id:5,text:"頼まれると断れない",cat:"AC"},
+    { id:6,text:"自分のやり方にこだわる",cat:"CP"}, { id:7,text:"他者の意見の根拠を求める",cat:"A"}, { id:8,text:"思ったことが口に出せない",cat:"AC"}, { id:9,text:"思いやりがある",cat:"NP"}, { id:10,text:"好き・嫌いがハッキリしている",cat:"FC"},
+    { id:11,text:"弱みをみせない",cat:"CP"}, { id:12,text:"教え方や伝え方がやさしく丁寧である",cat:"NP"}, { id:13,text:"無邪気である",cat:"FC"}, { id:14,text:"問題点や欠点に目が向きやすい",cat:"CP"}, { id:15,text:"情緒的というより理論的",cat:"A"},
+    { id:16,text:"つらくても我慢することが多い",cat:"AC"}, { id:17,text:"物事を人に任せず、自分で決めようとする",cat:"CP"}, { id:18,text:"ほかの人の顔色をうかがう",cat:"AC"}, { id:19,text:"ジョークやノリの良さで場を和ませるのが好き",cat:"FC"}, { id:20,text:"感謝の言葉に喜びを感じる",cat:"NP"},
+    { id:21,text:"人の承認を求める",cat:"AC"}, { id:22,text:"事実や数字に基づいて判断する",cat:"A"}, { id:23,text:"厳しく教育したほうが本人のためになると思う",cat:"CP"}, { id:24,text:"協調性がある",cat:"AC"}, { id:25,text:"感情的にならずに冷静に話す",cat:"A"},
+    { id:26,text:"喜怒哀楽の感情がそのまま出る",cat:"FC"}, { id:27,text:"客観的な立場で意見を言う",cat:"A"}, { id:28,text:"賛成・反対をはっきり言う",cat:"CP"}, { id:29,text:"約束やルール、時間に厳しい",cat:"CP"}, { id:30,text:"「なぜ」そうなのか、理由を検討する",cat:"A"},
+    { id:31,text:"「わぁ～」「へぇ～」等の感嘆詞をよく使う",cat:"FC"}, { id:32,text:"世話好きである",cat:"NP"}, { id:33,text:"なげやりな態度をとる",cat:"FC"}, { id:34,text:"責任感が強く、他人に対しても責任感を求める",cat:"CP"}, { id:35,text:"ほかの人が成長していく姿を見るのが好き",cat:"NP"},
+    { id:36,text:"わがままだと言われる",cat:"FC"}, { id:37,text:"表情や態度がソフトで親近感を感じさせる",cat:"NP"}, { id:38,text:"計画性がある",cat:"A"}, { id:39,text:"他人の言葉や態度を気にするほうだ",cat:"AC"}, { id:40,text:"合理的にやろうとする",cat:"A"},
+    { id:41,text:"慎重に行動する",cat:"AC"}, { id:42,text:"「～すべきである」「～ねばならない」と思う",cat:"CP"}, { id:43,text:"思いついたら行動が早い",cat:"FC"}, { id:44,text:"理想を求める",cat:"CP"}, { id:45,text:"話し合いでは、状況を把握してから発言する",cat:"A"},
+    { id:46,text:"してほしいことを気軽に口にする",cat:"FC"}, { id:47,text:"つい甘やかしてしまう",cat:"NP"}, { id:48,text:"相手の気持ちに応えようとする",cat:"AC"}, { id:49,text:"ねぎらいや励ましの言葉をかける",cat:"NP"}, { id:50,text:"自分が悪くもないのに、すぐに謝る",cat:"AC"}
+];
+
+const masterData = [
+    { name: "タイプ1：CP 優位型", v: [18,10,10,6,6], desc: `リーダーシップを発揮する理想主義者。責任感が強く、自分にも他者にも厳格です。` },
+    { name: "タイプ2：NP 優位型（への字型）", v: [8,18,10,10,8], desc: `面倒見の良い慈愛の人。他者の感情に敏感で、献身的にサポートすることを好みます。` },
+    { name: "タイプ3：A 優位型（山型）", v: [8,10,18,8,8], desc: `冷静沈着な合理主義者。感情に流されず、事実に基づいて的確に判断します。` },
+    { name: "タイプ4：FC 優位型", v: [6,10,10,18,6], desc: `自由奔放なクリエイター。好奇心旺盛で、自分の感情に素直に行動します。` },
+    { name: "タイプ5：AC 優位型", v: [6,8,10,8,18], desc: `協調性の高い努力家。周囲の期待に応えようとする力がありますが、自己抑制が強い傾向。` },
+    { name: "タイプ6：CP 低位型", v: [4,14,14,14,14], desc: `おおらかで寛容な人。細かいことにこだわらず、周囲に安心感を与えます。` },
+    { name: "タイプ7：NP 低位型", v: [18,4,10,10,18], desc: `実力主義の孤高の人。馴れ合いを嫌い、効率や成果を重視します。` },
+    { name: "タイプ8：A 低位型（V型）", v: [18,8,4,8,18], desc: `信念と葛藤の人。強い正義感と周囲への気遣いの間でストレスを溜めやすい傾向。` },
+    { name: "タイプ9：FC 低位型（逆への字型）", v: [18,18,14,4,18], desc: `真面目で献身的なサポーター。自分の楽しみを後回しにしてでも役割を全うします。` },
+    { name: "タイプ10：AC 低位型", v: [18,14,14,14,4], desc: `自信家で独立心の強い人。周囲に左右されず、自分の信じる道を進みます。` },
+    { name: "タイプ11：台形型I", v: [8,18,18,18,8], desc: `バランスの取れた円満な人格。知性と感性、優しさを兼ね備えています。` },
+    { name: "タイプ12：台形型II", v: [6,18,18,6,6], desc: `静かなる慈愛の人。控えめながらも、確かな判断力で他者を支えます。` },
+    { name: "タイプ13：台形型III", v: [6,6,18,18,6], desc: `知的で自由な個人主義者。合理性と楽しさを追求する洗練されたタイプ。` },
+    { name: "タイプ14：U型I", v: [18,8,4,8,18], desc: `ストイックな努力家。内面の葛藤は激しいですが、高い目標に向かって進みます。` },
+    { name: "タイプ15：U型II", v: [18,8,4,18,18], desc: `情熱的な直感型。論理よりもパッションと信念で周囲を動かします。` },
+    { name: "タイプ16：U型III", v: [18,18,4,8,18], desc: `献身的で生真面目な人。強い義務感を持って周囲に尽くします。` },
+    { name: "タイプ17：N型I（A低位）", v: [6,18,4,12,18], desc: `心優しい平和主義者。他人の幸福を第一に考え、調和を大切にします。` },
+    { name: "タイプ18：N型II（A中位）", v: [6,18,10,10,18], desc: `気配り上手な調整役。周囲のニーズを読み取り、柔軟に対応します。` },
+    { name: "タイプ19：N型III（A優位）", v: [6,18,18,6,18], desc: `緻密な実務家。正確さと協調性を兼ね備え、組織の中で重宝されます。` },
+    { name: "タイプ20：逆N型I", v: [18,6,18,6,6], desc: `冷静なリーダー。規律と論理を武器に、最短距離で目標を達成します。` },
+    { name: "タイプ21：逆N型II", v: [18,6,10,18,6], desc: `カリスマ的な開拓者。独自の価値観を持ち、強い意志で現状を打破します。` },
+    { name: "タイプ22：逆N型III", v: [18,6,6,18,6], desc: `エネルギッシュな行動派。考えるよりも先に身体を動かし、道を切り拓きます。` },
+    { name: "タイプ23：M型", v: [6,18,10,18,6], desc: `ムードメーカー。温かさと遊び心があり、周囲を明るくする才能があります。` },
+    { name: "タイプ24：W型", v: [18,6,18,6,18], desc: `求道者。高い知性と自己規律を持ち、常に自分を磨き続けるタイプ。` },
+    { name: "タイプ25：P 優位型", v: [18,18,10,8,6], desc: `包容力のある指導者。厳しさと優しさを高い次元で統合しています。` },
+    { name: "タイプ26：C 優位型", v: [6,8,10,18,18], desc: `愛される感受性の人。素直さと柔軟な心を持ち、周囲の助けを引き出します。` },
+    { name: "タイプ27：平坦型I", v: [18,18,18,18,18], desc: `全能型。極めて高いエネルギーを持ち、あらゆる分野で活躍できるポテンシャルがあります。` },
+    { name: "タイプ28：平坦型II", v: [10,10,10,10,10], desc: `中庸の人。極端な偏りがなく、安定した精神状態を保つことができます。` },
+    { name: "タイプ29：平坦型III", v: [4,4,4,4,4], desc: `省エネ型。現在はエネルギーを蓄える時期。静かに自分を見つめる時間が必要です。` }
+];
+
+let userAnswers = {};
+const qBox = document.getElementById("questions-container");
+
+function init() {
+    questions.forEach(q => {
+        const d = document.createElement("div");
+        d.className = "q-card";
+        d.innerHTML = `<span class="q-text">Q${q.id}. ${q.text}</span>
+            <div class="options">
+                <button class="opt-btn" onclick="ans(${q.id},2,this)">はい</button>
+                <button class="opt-btn" onclick="ans(${q.id},1,this)">どちらでもない</button>
+                <button class="opt-btn" onclick="ans(${q.id},0,this)">いいえ</button>
+            </div>`;
+        qBox.appendChild(d);
+    });
+}
+
+function ans(id, v, btn) {
+    userAnswers[id] = v;
+    const p = btn.closest(".q-card");
+    p.querySelectorAll(".opt-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    p.classList.add("answered");
+    const left = questions.length - Object.keys(userAnswers).length;
+    document.getElementById("remaining-count").innerText = left > 0 ? `残り${left}問です` : "解析準備完了！";
+    if (left === 0) document.getElementById("diagnose-trigger").style.display = "block";
+}
+
+document.getElementById("calc-btn").addEventListener("click", () => {
+    let s = { CP:0, NP:0, A:0, FC:0, AC:0 };
+    questions.forEach(q => s[q.cat] += (userAnswers[q.id] || 0));
+    
+    // 【アルゴリズム修正】形状の「ゆがみ」を強調してマッチング
+    const result = findBestMatch(s);
+    
+    document.getElementById("res-type-name").innerText = result.name;
+    document.getElementById("res-description").innerText = result.desc;
+    document.getElementById("result-section").style.display = "block";
+    draw(s);
+    document.getElementById("result-section").scrollIntoView({ behavior: "smooth" });
+});
+
+function findBestMatch(userS) {
+    const cats = ["CP", "NP", "A", "FC", "AC"];
+    const uArr = cats.map(c => userS[c]);
+    
+    // 平坦度の計算（標準偏差に近い考え方）
+    const avg = uArr.reduce((a, b) => a + b) / 5;
+    const variance = uArr.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / 5;
+
+    let best = null;
+    let minScore = Infinity;
+
+    masterData.forEach(m => {
+        let diff = 0;
+        m.v.forEach((val, i) => {
+            let d = Math.abs(uArr[i] - val);
+            // ユーザーのスコアが平坦でない（variance > 4）場合、平坦型(タイプ28)へのペナルティを課す
+            if ((m.name.includes("タイプ28") || m.name.includes("平坦")) && variance > 4) {
+                d += 5; 
+            }
+            diff += d * d; 
+        });
+        if (diff < minScore) { minScore = diff; best = m; }
+    });
+    return best;
+}
+
+let myChart;
+function draw(s) {
+    const ctx = document.getElementById("egogramChart");
+    if (myChart) myChart.destroy();
+    myChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ["CP", "NP", "A", "FC", "AC"],
+            datasets: [{
+                data: [s.CP, s.NP, s.A, s.FC, s.AC],
+                borderColor: '#2563eb',
+                borderWidth: 4,
+                pointRadius: 8,
+                pointBackgroundColor: '#2563eb',
+                fill: false,
+                tension: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { min: 0, max: 20, ticks: { stepSize: 2 }, grid: { borderDash: [5, 5], color: '#fed7aa' } },
+                x: { grid: { display: true, color: '#fed7aa' }, ticks: { font: { size: 16, weight: 'bold' } } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+init();
+</script>
+</body>
+</html>
